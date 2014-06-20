@@ -1,0 +1,65 @@
+Practical Machine Learning
+========================================================
+Submission from Marcel Belledin
+
+First loading the data:
+
+```{r}
+pml = read.csv("/Users/macbell/Desktop/1_coursera/predMachineLearning/pml-training.csv", na.strings=c("NA",""))
+```
+
+I wanted to know how many users there are...
+
+```{r}
+users <- pml[2:2]
+unique(users$user_name)
+```
+Now clean up the data:
+
+```{r}
+library(ElemStatLearn)
+library(caret)
+library(AppliedPredictiveModeling)
+library(png) 
+NAs <- apply(pml,2,function(x) {sum(is.na(x))}) #find NA
+pml.clean <- pml[,which(NAs == 0)] #only use usefull values
+remove <- grep("X|user_name|raw_timestamp_part_1|raw_timestamp_part_2|cvtd_timestamp|new_window|num_window",names(pml.clean)) #remove uninteresting data:
+pml.clean <- pml.clean[,-remove]
+pml.sample<- pml.clean[sample(nrow(pml.clean), 4700),] # first attempt:no need of using all data. +/- 500 rows per user for testing
+inTrain = createDataPartition(pml.sample$classe, p = 3/4)[[1]]
+training = pml.sample[inTrain,]
+testing = pml.sample[-inTrain,]
+#->modelFit <- train(classe ~ ., method="gbm", preProcess="pca", data=training) not realy good in accuracy
+```
+The idea is to remove highly correlated data:
+
+```{r}
+remove2 <- grep("classe",names(pml.sample))
+pml.t <- pml.sample[,-remove2]
+correlations = cor(pml.t) #create correlation Matrix
+correlations[lower.tri(correlations,diag=TRUE)]=NA  #set self correlated elements to NA
+corr.m=as.data.frame(as.table(correlations)) #turn into a 3-column table
+corr.m=na.omit(corr.m) 
+corr.ord=corr.m[order(-abs(corr.m$Freq)),] # sort 
+remov3 = grep("roll_belt| accel_belt_z| total_accel_belt| pitch_belt|accel_belt_x| accel_belt_y|accel_belt_z| gyros_arm_x| gyros_arm_y | magnet_belt_x  | yaw_dumbbell	| accel_dumbbell_z	| magnet_arm_y | magnet_arm_z|	yaw_belt|accel_arm_x|magnet_arm_x|pitch_dumbbell|accel_dumbbell_x",names(training))
+training2 <- training[,-remove]
+```
+In random forests, there is no need for cross-validation or a separate test set to get an unbiased estimate of the test set error. It is estimated internally, during the run... I used it to show how to apply.
+```{r}
+set.seed(825)
+tc <- trainControl(method = "repeatedcv", number = 8, repeats = 12, verboseIter=T, classProbs = TRUE) # 8 resampling iterations #for repeated k-fold cross-validation I chose 12 complete sets of folds to compute.
+#modelFit <- train(classe ~ ., method="rf", trControl=tc, data=training2)
+```
+#I only got an out of sample error of 0.7
+
+Doing the training on more data:
+
+```{r}
+pml.sample_big<- pml.clean[sample(nrow(pml.clean), 16000),]
+tc <- trainControl(method = "repeatedcv", number = 4, repeats = 3, verboseIter=T, classProbs = TRUE) #change params to save time...
+#modelFit <- train(classe ~ ., method="rf", trControl=tc, data=pml.sample_big)
+```
+Yeah.... I got the expected out of sample error of 0.008
+```{r}
+#confusionMatrix(testing$classe,predict(modelFit, testing))
+```
